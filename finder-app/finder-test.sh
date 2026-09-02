@@ -2,6 +2,10 @@
 # Tester script for assignment 1 and assignment 2
 # Author: Siddhant Jajoo
 
+# Clean previous build artifacts and compile writer natively
+make clean
+make
+
 set -e
 set -u
 
@@ -54,7 +58,7 @@ fi
 
 for i in $( seq 1 $NUMFILES)
 do
-	./writer.sh "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+	./writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 
 OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
