@@ -1,10 +1,5 @@
 #!/bin/sh
 # Tester script for assignment 1 and assignment 2
-# Author: Siddhant Jajoo
-
-# Clean previous build artifacts and compile writer natively
-make clean
-make
 
 set -e
 set -u

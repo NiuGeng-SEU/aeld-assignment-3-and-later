@@ -1,4 +1,9 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +21,22 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    if (cmd == NULL) {
+	return false;
+    }
 
-    return true;
+    // 调用底层 system()
+    int ret = system(cmd);
+    if (ret == -1) {
+        return false;
+    }
+
+    // 判断子进程是否正常退出且返回值为 0
+    if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) {
+        return true;
+    }
+
+    return false;
 }
 
 /**
@@ -45,23 +64,32 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
-
     va_end(args);
 
-    return true;
+    // 1. 刷新标准输出，防止 fork 时复制缓冲区导致打印重复
+    fflush(stdout);
+
+    // 2. 创建子进程
+    pid_t pid = fork();
+    if (pid == -1) {
+        return false; // fork 失败
+    }
+
+    if (pid == 0) {
+        // 子进程：执行外部命令（注意 command[0] 必须是绝对路径）
+        execv(command[0], command);
+        // 如果 execv 执行失败才会到这里，必须退出子进程，防止其继续执行父进程逻辑
+        exit(EXIT_FAILURE);
+    }
+
+    // 3. 父进程：等待子进程执行完毕
+    int status;
+    if (waitpid(pid, &status, 0) == -1) {
+        return false;
+    }
+
+    // 检查子进程是否正常退出，且退出码为 0
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }
 
 /**
@@ -80,20 +108,45 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
-
     va_end(args);
 
-    return true;
+    // 1. 打开（或创建）输出文件，权限设为 0644
+    int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        return false;
+    }
+
+    // 2. 清空输出缓冲区
+    fflush(stdout);
+
+    // 3. 创建子进程
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(fd);
+        return false;
+    }
+
+    if (pid == 0) {
+        // 子进程：将 stdout (文件描述符 1) 重定向到打开的文件 fd
+        if (dup2(fd, STDOUT_FILENO) < 0) {
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+        close(fd); // 复制完毕后关闭原描述符
+
+        // 执行命令
+        execv(command[0], command);
+        exit(EXIT_FAILURE);
+    }
+
+    // 4. 父进程：关闭打开的文件描述符（子进程已继承，父进程不再需要）
+    close(fd);
+
+    // 等待子进程退出并检查状态
+    int status;
+    if (waitpid(pid, &status, 0) == -1) {
+        return false;
+    }
+
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }
