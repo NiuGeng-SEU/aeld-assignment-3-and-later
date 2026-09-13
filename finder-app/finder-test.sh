@@ -7,7 +7,17 @@ set -u
 NUMFILES=10
 WRITESTR=AELD_IS_FUN
 WRITEDIR=/tmp/aeld-data
-username=$(cat conf/username.txt)
+
+# 1. 兼容板载固化路径 /etc/finder-app/conf 与宿主机本地路径
+if [ -d "/etc/finder-app/conf" ]; then
+	CONFDIR="/etc/finder-app/conf"
+elif [ -d "conf" ]; then
+	CONFDIR="conf"
+else
+	CONFDIR="../conf"
+fi
+
+username=$(cat "${CONFDIR}/username.txt")
 
 if [ $# -lt 3 ]
 then
@@ -17,7 +27,7 @@ then
 		echo "Using default value ${NUMFILES} for number of files to write"
 	else
 		NUMFILES=$1
-	fi	
+	fi
 else
 	NUMFILES=$1
 	WRITESTR=$2
@@ -30,16 +40,13 @@ echo "Writing ${NUMFILES} files containing string ${WRITESTR} to ${WRITEDIR}"
 
 rm -rf "${WRITEDIR}"
 
-# create $WRITEDIR if not assignment1
-assignment=`cat ../conf/assignment.txt`
+# 2. 读取 assignment.txt
+assignment=$(cat "${CONFDIR}/assignment.txt")
 
-if [ $assignment != 'assignment1' ]
+if [ "$assignment" != 'assignment1' ]
 then
 	mkdir -p "$WRITEDIR"
 
-	#The WRITEDIR is in quotes because if the directory path consists of spaces, then variable substitution will consider it as multiple argument.
-	#The quotes signify that the entire string in WRITEDIR is a single string.
-	#This issue can also be resolved by using double square brackets i.e [[ ]] instead of using quotes.
 	if [ -d "$WRITEDIR" ]
 	then
 		echo "$WRITEDIR created"
@@ -47,16 +54,18 @@ then
 		exit 1
 	fi
 fi
-#echo "Removing the old writer utility and compiling as a native application"
-#make clean
-#make
 
+# 3. 去掉 ./，直接通过 PATH 寻找 writer
 for i in $( seq 1 $NUMFILES)
 do
-	./writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+	writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 
-OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
+# 4. 去掉 ./，直接通过 PATH 寻找 finder.sh
+OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR")
+
+# 5. 将 finder 输出结果落盘到 /tmp/assignment4-result.txt（作业硬性要求）
+echo "${OUTPUTSTRING}" > /tmp/assignment4-result.txt
 
 # remove temporary directories
 rm -rf /tmp/aeld-data
